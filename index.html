@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>康永哥告狀器</title>
+<meta name="description" content="上傳照片、自動去背、填兩段字，做出康熙來了風格的告狀康永哥梗圖。全部在瀏覽器裡完成。">
+<meta property="og:title" content="康永哥告狀器">
+<meta property="og:description" content="上傳照片、自動去背、填兩段字，做出康熙來了風格的告狀康永哥梗圖。">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap">
+<style>
+/* Layout: big live preview on the left, one narrow control column on the right; stacks on phones. */
+:root {
+  --bg: #f6f3f7;
+  --panel: #ffffff;
+  --fg: #221a26;
+  --muted: #6f6475;
+  --line: #e2dbe6;
+  --pink: #d93a91;
+  --cyan: #1597c4;
+  --field: #fbf9fc;
+  --font-display: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17121a; --panel: #211a25; --fg: #f1eaf4; --muted: #a99db0;
+    --line: #3a3040; --pink: #f06bb3; --cyan: #4cc3ea; --field: #1b151f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17121a; --panel: #211a25; --fg: #f1eaf4; --muted: #a99db0;
+  --line: #3a3040; --pink: #f06bb3; --cyan: #4cc3ea; --field: #1b151f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 18px; }
+header h1 {
+  font-family: var(--font-display); font-weight: 900; font-size: 1.7rem; margin: 0;
+  letter-spacing: .02em; text-wrap: balance;
+}
+header h1 .hi { color: var(--cyan); }
+header h1 .pk { color: var(--pink); }
+header p { margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.stage { position: relative; min-width: 0; }
+canvas {
+  display: block; width: 100%; height: auto; border-radius: 10px;
+  background: #222; touch-action: none; cursor: grab;
+  box-shadow: 0 6px 24px rgb(0 0 0 / .18);
+}
+canvas.dragging { cursor: grabbing; }
+.hint { margin: 8px 2px 0; color: var(--muted); font-size: .82rem; }
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px; display: grid; gap: 16px;
+}
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+legend {
+  font-size: .75rem; font-weight: 700; letter-spacing: .08em; color: var(--muted);
+  margin-bottom: 6px; padding: 0;
+}
+label { font-size: .85rem; display: grid; gap: 4px; }
+input[type="text"] {
+  font: inherit; font-size: 1rem; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg); width: 100%;
+}
+input[type="text"]:focus-visible, button:focus-visible, input[type="range"]:focus-visible, .file:focus-within {
+  outline: 2px solid var(--cyan); outline-offset: 2px;
+}
+input[type="range"] { width: 100%; accent-color: var(--pink); }
+.note { font-size: .78rem; color: var(--muted); margin: 0; }
+.note code { background: var(--field); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+button, .file {
+  font: inherit; font-size: .9rem; border-radius: 8px; padding: 8px 12px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg);
+}
+.file { display: inline-flex; align-items: center; justify-content: center; flex: 1; font-weight: 700; }
+.file input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+button.primary {
+  width: 100%; font-weight: 900; font-size: 1.05rem; padding: 12px; border: 0;
+  background: var(--pink); color: #fff;
+}
+#status { min-height: 1.2em; font-size: .85rem; color: var(--muted); margin: 0; }
+#result { display: grid; gap: 6px; }
+#result img { border-radius: 8px; border: 1px solid var(--line); }
+@media (prefers-reduced-motion: no-preference) { button { transition: filter .15s; } button:hover { filter: brightness(1.06); } }
+a { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1><span class="hi">康永哥</span><span class="pk">告狀器</span></h1>
+    <p>上傳人物照片（可自動去背）、填兩段字，就能做出「康熙來了」告狀梗圖。全部在你的瀏覽器裡完成，圖片不會上傳。</p>
+  </header>
+
+  <div class="main">
+    <div class="stage">
+      <canvas id="cv" width="1448" height="1086" aria-label="梗圖預覽"></canvas>
+      <p class="hint">在圖上拖曳可移動人物，滾輪或雙指可縮放。</p>
+    </div>
+
+    <form class="panel" id="form">
+      <fieldset>
+        <legend>人物</legend>
+        <div class="row">
+          <label class="file" for="photo">上傳人物照片<input type="file" id="photo" accept="image/*"></label>
+        </div>
+        <div id="bgTools" hidden style="display:grid;gap:8px">
+          <div class="row">
+            <button type="button" id="cutAuto">自動去背</button>
+            <button type="button" id="cutUndo">還原原圖</button>
+          </div>
+          <p class="note">真人、卡通、物品都能去背。去背在你的瀏覽器裡執行，第一次會下載約 56MB 的模型，之後會快取。</p>
+        </div>
+        <label for="scale">大小
+          <input type="range" id="scale" min="0.3" max="2.5" step="0.01" value="1">
+        </label>
+        <div class="row">
+          <button type="button" id="flip">左右翻轉</button>
+          <button type="button" id="reset">重設位置</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>大字</legend>
+        <label for="line1">第一行
+          <input type="text" id="line1" value="他叫我[搭機捷]欸" maxlength="30">
+        </label>
+        <p class="note">用 <code>[ ]</code> 框起來的字會變成藍色重點字。</p>
+        <label for="line2">第二行
+          <input type="text" id="line2" value="康永哥" maxlength="12">
+        </label>
+        <label for="bannerY">上下位置
+          <input type="range" id="bannerY" min="-260" max="60" step="1" value="0">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Q 標籤</legend>
+        <label for="q1">第一行
+          <input type="text" id="q1" value="土地公" maxlength="10">
+        </label>
+        <label for="q2">第二行
+          <input type="text" id="q2" value="竟自己半夜出巡" maxlength="10">
+        </label>
+      </fieldset>
+
+      <div style="display:grid;gap:8px">
+        <button type="submit" class="primary">下載 PNG</button>
+        <p id="status" role="status"></p>
+        <div id="result" hidden>
+          <p class="note">沒有開始下載的話（例如在 LINE、Facebook 裡開啟），請在下圖長按或按右鍵另存。</p>
+          <img id="resultImg" alt="完成的梗圖">
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <footer class="note">
+    原始碼：<a href="https://github.com/wildcat1977/kangyong-complain.github.io">GitHub</a>（AGPL-3.0）。
+    去背使用 <a href="https://github.com/imgly/background-removal-js">IMG.LY background-removal</a>（AGPL-3.0）。
+  </footer>
+</div>
+
+<script>
+const W = 1448, H = 1086;
+const FONT = '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+
+const bg = new Image();
+bg.src = 'bg.jpg';
+bg.onload = () => render();
+
+const state = { person: null, px: W * 0.47, py: H + 20, scale: 1, flip: false };
+
+
+function parseLine(str) {
+  const segs = [];
+  str.split(/(\[[^\]]*\])/).forEach(part => {
+    if (!part) return;
+    const hi = part.startsWith('[') && part.endsWith(']');
+    const t = hi ? part.slice(1, -1) : part;
+    if (t) segs.push({ t, hi });
+  });
+  return segs;
+}
+
+// Variety-show caption: colored offset shadow, thick dark outline, vertical gradient fill.
+// `size` is the highlighted-word size; plain words are drawn smaller so [ ] words pop.
+const PLAIN_RATIO = 0.8;
+function drawCaption(c, segs, cx, y, size, maxW) {
+  const fontSize = s => size * (s.hi ? 1 : PLAIN_RATIO);
+  const measure = s => { c.font = `900 ${fontSize(s)}px ${FONT}`; return c.measureText(s.t).width; };
+  let total = segs.reduce((a, s) => a + measure(s), 0);
+  if (total > maxW) {
+    size *= maxW / total;
+    total = maxW;
+  }
+  let x = cx - total / 2;
+  const placed = segs.map(s => { const p = { ...s, x, fs: fontSize(s) }; x += measure(s); return p; });
+
+  c.save();
+  c.textBaseline = 'alphabetic';
+  c.lineJoin = 'round';
+  c.miterLimit = 2;
+
+  for (const s of placed) {
+    c.font = `900 ${s.fs}px ${FONT}`;
+    c.strokeStyle = c.fillStyle = s.hi ? '#2aa8dc' : '#9a3fd0';
+    c.lineWidth = s.fs * 0.27;
+    c.strokeText(s.t, s.x + s.fs * 0.03, y + s.fs * 0.07);
+  }
+  c.strokeStyle = '#140b1a';
+  for (const s of placed) {
+    c.font = `900 ${s.fs}px ${FONT}`;
+    c.lineWidth = s.fs * 0.17;
+    c.strokeText(s.t, s.x, y);
+  }
+
+  for (const s of placed) {
+    c.font = `900 ${s.fs}px ${FONT}`;
+    const g = c.createLinearGradient(0, y - s.fs * 0.85, 0, y + s.fs * 0.08);
+    if (s.hi) { g.addColorStop(0, '#ffffff'); g.addColorStop(0.42, '#e6fbff'); g.addColorStop(1, '#36c2ef'); }
+    else { g.addColorStop(0, '#ffffff'); g.addColorStop(0.42, '#fff2fb'); g.addColorStop(1, '#ee8bdc'); }
+    c.fillStyle = g;
+    c.fillText(s.t, s.x, y);
+  }
+  c.restore();
+}
+
+function fitText(c, text, weight, size, maxW) {
+  c.font = `${weight} ${size}px ${FONT}`;
+  const w = c.measureText(text).width;
+  if (w > maxW) { size *= maxW / w; c.font = `${weight} ${size}px ${FONT}`; }
+  return size;
+}
+
+function drawQBadge(c, q1, q2) {
+  const cx = 185, cy = 878;
+  c.save();
+
+  // wave splash behind the Q
+  const wave = c.createLinearGradient(0, 790, 0, 970);
+  wave.addColorStop(0, '#bfe9fb'); wave.addColorStop(1, '#4fb3e3');
+  c.fillStyle = wave;
+  c.beginPath();
+  c.moveTo(60, 960);
+  c.bezierCurveTo(30, 880, 70, 800, 150, 792);
+  c.bezierCurveTo(200, 786, 250, 800, 290, 830);
+  c.lineTo(300, 950);
+  c.bezierCurveTo(240, 975, 140, 985, 60, 960);
+  c.fill();
+
+  // coral sprig
+  c.strokeStyle = '#f39a2c'; c.lineCap = 'round'; c.lineWidth = 9;
+  c.beginPath();
+  c.moveTo(118, 800); c.lineTo(108, 745); c.moveTo(110, 762); c.lineTo(82, 738);
+  c.moveTo(108, 745); c.lineTo(126, 718); c.moveTo(114, 776); c.lineTo(140, 752);
+  c.stroke();
+
+  // label plate
+  const lx = 282, ly = 822, lw = 245, lh = 112;
+  c.fillStyle = '#ffffff';
+  c.strokeStyle = '#7cc8ec'; c.lineWidth = 5;
+  c.beginPath(); c.roundRect(lx, ly, lw, lh, 14); c.fill(); c.stroke();
+
+  c.fillStyle = '#e3302a';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  fitText(c, q1, 900, 44, lw - 30); c.fillText(q1, lx + lw / 2, ly + 33);
+  fitText(c, q2, 900, 44, lw - 30); c.fillText(q2, lx + lw / 2, ly + 82);
+
+  // the Q itself
+  c.fillStyle = '#ffffff';
+  c.beginPath(); c.arc(cx, cy, 84, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#141414'; c.lineWidth = 26;
+  c.beginPath(); c.arc(cx, cy, 56, 0, Math.PI * 2); c.stroke();
+  c.lineWidth = 22;
+  c.beginPath(); c.moveTo(cx + 22, cy + 30); c.lineTo(cx + 78, cy + 74); c.stroke();
+  c.strokeStyle = '#d8d8d8'; c.lineWidth = 3;
+  c.beginPath(); c.arc(cx, cy, 84, 0, Math.PI * 2); c.stroke();
+  c.restore();
+}
+
+function drawPerson(c, forExport) {
+  if (state.person) {
+    const img = state.person;
+    const h = H * 0.92 * state.scale;
+    const w = img.width * (h / img.height);
+    c.save();
+    c.translate(state.px, state.py);
+    if (state.flip) c.scale(-1, 1);
+    c.drawImage(img, -w / 2, -h, w, h);
+    c.restore();
+  } else if (!forExport) {
+    c.save();
+    c.fillStyle = 'rgba(30, 20, 40, .42)';
+    c.beginPath(); c.arc(W * 0.47, 420, 150, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.ellipse(W * 0.47, 980, 360, 330, 0, Math.PI, 0); c.fill();
+    c.fillStyle = '#ffffff';
+    c.font = `700 46px ${FONT}`;
+    c.textAlign = 'center';
+    c.fillText('在右邊上傳人物去背圖', W * 0.47, 430);
+    c.restore();
+  }
+}
+
+function draw(c, forExport = false) {
+  c.clearRect(0, 0, W, H);
+  if (bg.complete && bg.naturalWidth) c.drawImage(bg, 0, 0, W, H);
+  drawPerson(c, forExport);
+  drawQBadge(c, $('q1').value, $('q2').value);
+  const dy = Number($('bannerY').value);
+  drawCaption(c, parseLine($('line1').value), W * 0.5, 795 + dy, 160, 1340);
+  drawCaption(c, [{ t: $('line2').value, hi: true }].filter(s => s.t), W * 0.525, 985 + dy, 168, 1300);
+}
+
+let pending = false;
+function render() {
+  if (pending) return;
+  pending = true;
+  const text = ['line1', 'line2', 'q1', 'q2'].map(id => $(id).value).join('') + '在右邊上傳人物去背圖';
+  Promise.all([
+    document.fonts.load(`900 100px "Noto Sans TC"`, text),
+    document.fonts.load(`700 100px "Noto Sans TC"`, text),
+  ]).catch(() => {}).finally(() => {
+    pending = false;
+    requestAnimationFrame(() => draw(ctx));
+  });
+}
+
+['line1', 'line2', 'q1', 'q2', 'bannerY'].forEach(id => $(id).addEventListener('input', render));
+$('scale').addEventListener('input', e => { state.scale = Number(e.target.value); draw(ctx); });
+$('flip').addEventListener('click', () => { state.flip = !state.flip; draw(ctx); });
+function resetPlacement() {
+  Object.assign(state, { px: W * 0.47, py: H + 20, scale: 1 });
+  $('scale').value = 1;
+  draw(ctx);
+}
+$('reset').addEventListener('click', resetPlacement);
+
+const MAX_SIDE = 1600;
+$('photo').addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    const k = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * k);
+    c.height = Math.round(img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    state.original = c;
+    state.person = c;
+    $('bgTools').hidden = false;
+    $('status').textContent = '';
+    resetPlacement();
+  };
+  img.onerror = () => { $('status').textContent = '這個檔案讀不出來，請換一張 PNG 或 JPG。'; };
+  img.src = URL.createObjectURL(file);
+});
+
+// --- background removal (IMG.LY background-removal, runs locally) ---
+const BGR_URL = 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm';
+let bgrModule = null;
+
+// Crop a transparent cut-out to the visible subject.
+function cropToAlpha(img) {
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const cctx = c.getContext('2d');
+  cctx.drawImage(img, 0, 0);
+  const { data } = cctx.getImageData(0, 0, c.width, c.height);
+  let minX = c.width, minY = c.height, maxX = -1, maxY = -1;
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      if (data[(y * c.width + x) * 4 + 3] > 30) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0) throw new Error('沒有找到主體');
+  const out = document.createElement('canvas');
+  out.width = maxX - minX + 1; out.height = maxY - minY + 1;
+  out.getContext('2d').drawImage(c, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+  return out;
+}
+
+function setBusy(msg) {
+  $('status').textContent = msg || '';
+  ['cutAuto', 'cutUndo'].forEach(id => { $(id).disabled = !!msg; });
+}
+
+async function cutout() {
+  const src = state.original;
+  if (!src) return;
+  try {
+    setBusy('載入去背模型中…');
+    bgrModule ??= import(BGR_URL);
+    const { removeBackground } = await bgrModule;
+    const fetched = {};
+    const blob = await new Promise(r => src.toBlob(r, 'image/png'));
+    const result = await removeBackground(blob, {
+      model: 'isnet_quint8',
+      output: { format: 'image/png' },
+      progress: (key, current, total) => {
+        if (!key.startsWith('fetch:')) { setBusy('去背中…'); return; }
+        fetched[key] = [current, total];
+        const [cur, tot] = Object.values(fetched).reduce((a, [c, t]) => [a[0] + c, a[1] + t], [0, 0]);
+        setBusy(`下載去背模型 ${Math.round(cur / tot * 100)}%（第一次約 56MB，之後會快取）`);
+      },
+    });
+    const img = await createImageBitmap(result);
+    state.person = cropToAlpha(img);
+    resetPlacement();
+    setBusy('');
+    $('status').textContent = '去背完成。';
+  } catch (err) {
+    console.error(err);
+    bgrModule = null;
+    setBusy('');
+    $('status').textContent = `去背失敗：${err?.message || err}`;
+  }
+}
+
+$('cutAuto').addEventListener('click', cutout);
+$('cutUndo').addEventListener('click', () => { state.person = state.original; resetPlacement(); $('status').textContent = ''; });
+
+// drag to move, wheel or pinch to scale
+const pointers = new Map();
+let pinchStart = null;
+function toCanvas(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+}
+function setScale(s) {
+  state.scale = Math.min(2.5, Math.max(0.3, s));
+  $('scale').value = state.scale;
+  draw(ctx);
+}
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, toCanvas(e));
+  cv.classList.add('dragging');
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinchStart = { d: Math.hypot(a.x - b.x, a.y - b.y), s: state.scale };
+  }
+});
+cv.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  const prev = pointers.get(e.pointerId);
+  const cur = toCanvas(e);
+  pointers.set(e.pointerId, cur);
+  if (pointers.size === 1) {
+    state.px += cur.x - prev.x;
+    state.py += cur.y - prev.y;
+    draw(ctx);
+  } else if (pointers.size === 2 && pinchStart) {
+    const [a, b] = [...pointers.values()];
+    setScale(pinchStart.s * Math.hypot(a.x - b.x, a.y - b.y) / pinchStart.d);
+  }
+});
+function endPointer(e) {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchStart = null;
+  if (!pointers.size) cv.classList.remove('dragging');
+}
+cv.addEventListener('pointerup', endPointer);
+cv.addEventListener('pointercancel', endPointer);
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  setScale(state.scale * (e.deltaY < 0 ? 1.05 : 1 / 1.05));
+}, { passive: false });
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  draw(out.getContext('2d'), true);
+  const blob = await new Promise(r => out.toBlob(r, 'image/png'));
+  const name = `康永哥-${$('line1').value.replace(/[\[\]\\/:*?"<>|]/g, '').slice(0, 20) || '告狀'}.png`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // In-app browsers (LINE, Facebook) often ignore downloads, so also show the image for long-press saving.
+  $('resultImg').src = url;
+  $('result').hidden = false;
+  $('status').textContent = '';
+});
+
+render();
+</script>
+</body>
+</html>
