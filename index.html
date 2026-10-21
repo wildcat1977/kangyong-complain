@@ -109,7 +109,32 @@ button.primary {
   width: 100%; font-weight: 900; font-size: 1.05rem; padding: 12px; border: 0;
   background: var(--pink); color: #fff;
 }
-#status { min-height: 1.2em; font-size: .85rem; color: var(--muted); margin: 0; }
+.busy {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+  background: rgb(20 11 26 / .55);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.busy-card {
+  background: var(--panel); color: var(--fg); border-radius: 14px; padding: 20px 22px;
+  width: min(360px, 100%); display: grid; gap: 12px; box-shadow: 0 10px 40px rgb(0 0 0 / .3);
+}
+#busyMsg { margin: 0; font-weight: 900; font-size: 1.1rem; }
+.bar { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.bar span {
+  display: block; height: 100%; width: 0; border-radius: inherit;
+  background: linear-gradient(90deg, var(--pink), var(--cyan)); transition: width .2s;
+}
+/* transform-only so it keeps moving while inference blocks the main thread */
+.bar.indeterminate span { width: 35%; animation: slide 1.1s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@media (prefers-reduced-motion: reduce) { .bar.indeterminate span { animation: none; width: 100%; opacity: .5; } }
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 110;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 10px;
+  background: var(--fg); color: var(--bg); font-size: .9rem; box-shadow: 0 6px 20px rgb(0 0 0 / .25);
+}
 #result { display: grid; gap: 6px; }
 #result img { border-radius: 8px; border: 1px solid var(--line); }
 @media (prefers-reduced-motion: no-preference) { button { transition: filter .15s; } button:hover { filter: brightness(1.06); } }
@@ -181,7 +206,6 @@ a { color: var(--cyan); }
 
       <div style="display:grid;gap:8px">
         <button type="submit" class="primary">下載 PNG</button>
-        <p id="status" role="status"></p>
         <div id="result" hidden>
           <p class="note">沒有開始下載的話（例如在 LINE、Facebook 裡開啟），請在下圖長按或按右鍵另存。</p>
           <img id="resultImg" alt="完成的梗圖">
@@ -196,6 +220,15 @@ a { color: var(--cyan); }
     預設人物「黃仁勳」照片：<a href="https://commons.wikimedia.org/wiki/File:Jensen_Huang_20231109.jpg">總統府</a>，<a href="https://creativecommons.org/licenses/by/2.0/">CC BY 2.0</a>，經去背處理。
   </footer>
 </div>
+
+<div class="busy" id="busy" hidden role="alertdialog" aria-modal="true" aria-labelledby="busyMsg" aria-describedby="busyNote">
+  <div class="busy-card">
+    <p id="busyMsg">處理中…</p>
+    <div class="bar" id="busyBar"><span></span></div>
+    <p class="note" id="busyNote"></p>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script>
 const W = 1448, H = 1086;
@@ -377,12 +410,20 @@ function resetPlacement() {
 }
 $('reset').addEventListener('click', resetPlacement);
 
+// Short message floating at the bottom of the screen, visible wherever the page is scrolled.
+let toastTimer;
+function toast(msg, ms = 3500) {
+  $('toast').textContent = msg;
+  $('toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $('toast').hidden = true; }, ms);
+}
+
 // Presets are already cut out; uploads can still go through background removal.
 function setPerson(img, canCut, presetFile = null) {
   state.original = img;
   state.person = img;
   $('bgTools').hidden = !canCut;
-  $('status').textContent = '';
   document.querySelectorAll('#presets button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.file === presetFile)));
   resetPlacement();
 }
@@ -406,7 +447,7 @@ PRESETS.forEach(p => {
   b.addEventListener('click', () => {
     const img = new Image();
     img.onload = () => { $('photo').value = ''; setPerson(img, false, p.file); };
-    img.onerror = () => { $('status').textContent = `${p.name}的圖片載入失敗，請重新整理再試。`; };
+    img.onerror = () => toast(`${p.name}的圖片載入失敗，請重新整理再試。`, 6000);
     img.src = `presets/${p.file}.webp`;
   });
   $('presets').append(b);
@@ -424,7 +465,7 @@ function loadPhoto(blob) {
     URL.revokeObjectURL(img.src);
     setPerson(c, true);
   };
-  img.onerror = () => { $('status').textContent = '這張圖片讀不出來，請換一張 PNG 或 JPG。'; };
+  img.onerror = () => toast('這張圖片讀不出來，請換一張 PNG 或 JPG。', 6000);
   img.src = URL.createObjectURL(blob);
 }
 
@@ -455,10 +496,10 @@ if (navigator.clipboard?.read) {
           return;
         }
       }
-      $('status').textContent = '剪貼簿裡沒有圖片，請先複製一張圖片再按「貼上圖片」。';
+      toast('剪貼簿裡沒有圖片，請先複製一張圖片再按「貼上圖片」。', 6000);
     } catch (err) {
       console.error(err);
-      $('status').textContent = '無法讀取剪貼簿。請允許瀏覽器存取剪貼簿，或改用「上傳人物照片」。';
+      toast('無法讀取剪貼簿。請允許瀏覽器存取剪貼簿，或改用「上傳人物照片」。', 6000);
     }
   });
 }
@@ -490,16 +531,23 @@ function cropToAlpha(img) {
   return out;
 }
 
-function setBusy(msg) {
-  $('status').textContent = msg || '';
+// Full-screen overlay while working; pct null = indeterminate bar.
+function setBusy(msg, pct = null, note = '') {
+  $('busy').hidden = !msg;
   ['cutAuto', 'cutUndo'].forEach(id => { $(id).disabled = !!msg; });
+  if (!msg) return;
+  $('busyMsg').textContent = msg;
+  $('busyNote').textContent = note;
+  $('busyBar').classList.toggle('indeterminate', pct === null);
+  $('busyBar').firstElementChild.style.width = pct === null ? '' : `${pct}%`;
 }
 
+const COMPUTE_NOTE = '依裝置效能約需幾秒到數十秒，請稍候。';
 async function cutout() {
   const src = state.original;
   if (!src) return;
   try {
-    setBusy('載入去背模型中…');
+    setBusy('載入去背工具…');
     bgrModule ??= import(BGR_URL);
     const { removeBackground } = await bgrModule;
     const fetched = {};
@@ -508,27 +556,30 @@ async function cutout() {
       model: 'isnet_quint8',
       output: { format: 'image/png' },
       progress: (key, current, total) => {
-        if (!key.startsWith('fetch:')) { setBusy('去背中…'); return; }
+        if (!key.startsWith('fetch:')) { setBusy('去背中…', null, COMPUTE_NOTE); return; }
         fetched[key] = [current, total];
         const [cur, tot] = Object.values(fetched).reduce((a, [c, t]) => [a[0] + c, a[1] + t], [0, 0]);
-        setBusy(`下載去背模型 ${Math.round(cur / tot * 100)}%（第一次約 56MB，之後會快取）`);
+        // inference starts right after the last byte and blocks repaint, so switch the text early
+        if (cur >= tot) setBusy('去背中…', null, COMPUTE_NOTE);
+        else setBusy(`下載去背模型 ${Math.round(cur / tot * 100)}%`, cur / tot * 100, '第一次約 56MB，之後瀏覽器會快取。');
       },
     });
     const img = await createImageBitmap(result);
     state.person = cropToAlpha(img);
     resetPlacement();
     setBusy('');
-    $('status').textContent = '去背完成。';
+    cv.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    toast('去背完成');
   } catch (err) {
     console.error(err);
     bgrModule = null;
     setBusy('');
-    $('status').textContent = `去背失敗：${err?.message || err}`;
+    toast(`去背失敗：${err?.message || err}`, 8000);
   }
 }
 
 $('cutAuto').addEventListener('click', cutout);
-$('cutUndo').addEventListener('click', () => { state.person = state.original; resetPlacement(); $('status').textContent = ''; });
+$('cutUndo').addEventListener('click', () => { state.person = state.original; resetPlacement(); });
 
 // drag to move, wheel or pinch to scale
 const pointers = new Map();
@@ -594,7 +645,6 @@ $('form').addEventListener('submit', async e => {
   // In-app browsers (LINE, Facebook) often ignore downloads, so also show the image for long-press saving.
   $('resultImg').src = url;
   $('result').hidden = false;
-  $('status').textContent = '';
 });
 
 render();
