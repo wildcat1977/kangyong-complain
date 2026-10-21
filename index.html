@@ -319,7 +319,7 @@ function drawPerson(c, forExport) {
     c.fillStyle = '#ffffff';
     c.font = `700 46px ${FONT}`;
     c.textAlign = 'center';
-    c.fillText('在右邊上傳人物去背圖', W * 0.47, 430);
+    c.fillText('上傳人物圖片', W * 0.47, 430);
     c.restore();
   }
 }
@@ -338,7 +338,7 @@ let pending = false;
 function render() {
   if (pending) return;
   pending = true;
-  const text = ['line1', 'line2', 'q1', 'q2'].map(id => $(id).value).join('') + '在右邊上傳人物去背圖';
+  const text = ['line1', 'line2', 'q1', 'q2'].map(id => $(id).value).join('') + '上傳人物圖片';
   Promise.all([
     document.fonts.load(`900 100px "Noto Sans TC"`, text),
     document.fonts.load(`700 100px "Noto Sans TC"`, text),
