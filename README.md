@@ -29,3 +29,7 @@ python3 -m http.server 8765
 AGPL-3.0，與所使用的 IMG.LY background-removal 相同。見 [LICENSE.md](LICENSE.md)。
 
 底圖 `bg.jpg` 為重新生成的仿節目場景圖。
+
+預設人物照片出處：
+
+- 黃仁勳（`presets/jensen*.webp`）：[總統府](https://commons.wikimedia.org/wiki/File:Jensen_Huang_20231109.jpg)，[CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)，經去背、裁切處理。頁尾已標示署名，換圖時記得一併更新。
