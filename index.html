@@ -81,6 +81,8 @@ legend {
   margin-bottom: 6px; padding: 0;
 }
 label { font-size: .85rem; display: grid; gap: 4px; }
+label.check { display: flex; align-items: center; gap: 8px; }
+label.check input { accent-color: var(--pink); width: 1.1em; height: 1.1em; margin: 0; }
 input[type="text"] {
   font: inherit; font-size: 1rem; padding: 8px 10px; border-radius: 8px;
   border: 1px solid var(--line); background: var(--field); color: var(--fg); width: 100%;
@@ -169,6 +171,7 @@ a { color: var(--cyan); }
             <button type="button" id="cutAuto">自動去背</button>
             <button type="button" id="cutUndo">還原原圖</button>
           </div>
+          <label class="check" for="fillHoles"><input type="checkbox" id="fillHoles" checked> 補回主體上被誤挖的小洞（例如眉毛、圖案）</label>
           <p class="note">真人、卡通、物品都能去背。去背在你的瀏覽器裡執行，第一次會下載約 56MB 的模型，之後會快取。</p>
         </div>
         <label for="scale">大小
@@ -531,6 +534,66 @@ function cropToAlpha(img) {
   return out;
 }
 
+// The model sometimes punches holes inside the subject (e.g. a green mascot eyebrow that looks like the hedge).
+// Transparent regions that don't reach the image border are holes; refill them from the original photo.
+// Large ones stay open, since gaps like between an arm and the body are real background.
+const HOLE_MAX_RATIO = 0.03;
+function fillHoles(cut, orig) {
+  const w = cut.width, h = cut.height, n = w * h;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cctx = c.getContext('2d', { willReadFrequently: true });
+  cctx.drawImage(orig, 0, 0, w, h);
+  const src = cctx.getImageData(0, 0, w, h).data;
+  cctx.clearRect(0, 0, w, h);
+  cctx.drawImage(cut, 0, 0);
+  const out = cctx.getImageData(0, 0, w, h);
+  const px = out.data;
+
+  const open = new Uint8Array(n); // transparent and not yet visited
+  let solid = 0;
+  for (let i = 0; i < n; i++) {
+    if (px[i * 4 + 3] < 128) open[i] = 1; else solid++;
+  }
+  const restore = p => {
+    const o = p * 4;
+    px[o] = src[o]; px[o + 1] = src[o + 1]; px[o + 2] = src[o + 2]; px[o + 3] = 255;
+  };
+  const queue = new Int32Array(n);
+  for (let start = 0; start < n; start++) {
+    if (!open[start]) continue;
+    let head = 0, tail = 0, border = false;
+    open[start] = 0;
+    queue[tail++] = start;
+    while (head < tail) {
+      const p = queue[head++], x = p % w, y = (p / w) | 0;
+      if (x === 0 || y === 0 || x === w - 1 || y === h - 1) border = true;
+      if (x > 0 && open[p - 1]) { open[p - 1] = 0; queue[tail++] = p - 1; }
+      if (x < w - 1 && open[p + 1]) { open[p + 1] = 0; queue[tail++] = p + 1; }
+      if (y > 0 && open[p - w]) { open[p - w] = 0; queue[tail++] = p - w; }
+      if (y < h - 1 && open[p + w]) { open[p + w] = 0; queue[tail++] = p + w; }
+    }
+    if (border || tail > solid * HOLE_MAX_RATIO) continue;
+    for (let k = 0; k < tail; k++) {
+      const p = queue[k], x = p % w;
+      restore(p);
+      // also firm up the half-transparent rim so the hole doesn't leave a faint ring
+      if (x > 0 && px[(p - 1) * 4 + 3] < 255) restore(p - 1);
+      if (x < w - 1 && px[(p + 1) * 4 + 3] < 255) restore(p + 1);
+      if (p >= w && px[(p - w) * 4 + 3] < 255) restore(p - w);
+      if (p < n - w && px[(p + w) * 4 + 3] < 255) restore(p + w);
+    }
+  }
+  cctx.putImageData(out, 0, 0);
+  return c;
+}
+
+function applyCut() {
+  const cut = $('fillHoles').checked ? fillHoles(state.rawCut, state.original) : state.rawCut;
+  state.person = cropToAlpha(cut);
+  resetPlacement();
+}
+
 // Full-screen overlay while working; pct null = indeterminate bar.
 function setBusy(msg, pct = null, note = '') {
   $('busy').hidden = !msg;
@@ -564,9 +627,8 @@ async function cutout() {
         else setBusy(`下載去背模型 ${Math.round(cur / tot * 100)}%`, cur / tot * 100, '第一次約 56MB，之後瀏覽器會快取。');
       },
     });
-    const img = await createImageBitmap(result);
-    state.person = cropToAlpha(img);
-    resetPlacement();
+    state.rawCut = await createImageBitmap(result);
+    applyCut();
     setBusy('');
     cv.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     toast('去背完成');
@@ -580,6 +642,10 @@ async function cutout() {
 
 $('cutAuto').addEventListener('click', cutout);
 $('cutUndo').addEventListener('click', () => { state.person = state.original; resetPlacement(); });
+$('fillHoles').addEventListener('change', () => {
+  // re-apply to the current cut-out only; no new inference needed
+  if (state.rawCut && state.person !== state.original) applyCut();
+});
 
 // drag to move, wheel or pinch to scale
 const pointers = new Map();
