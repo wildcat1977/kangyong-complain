@@ -17,6 +17,7 @@
 - 單一靜態頁面 `index.html`，沒有建置步驟，用 Canvas 合成圖片。
 - 去背使用 [IMG.LY background-removal](https://github.com/imgly/background-removal-js) 1.7.0（`isnet_quint8` 模型），模型與 wasm 從 IMG.LY 的 CDN 載入，第一次約 56MB，之後由瀏覽器快取。
 - 字型使用 Google Fonts 的 Noto Sans TC。
+- 流量統計使用 Cloudflare Web Analytics（不使用 cookie、不追蹤個人；只記錄頁面瀏覽，不會碰到使用者的圖片）。
 - 預設人物用 `@imgly/background-removal-node`（medium 模型）先去背，裁到主體後轉成 WebP（本圖高 1000px 以內，`_thumb` 為 180px 縮圖）。新增人物：放入 `presets/<file>.webp` 與 `presets/<file>_thumb.webp`，並在 `index.html` 的 `PRESETS` 加一筆。
 
 本機測試：
